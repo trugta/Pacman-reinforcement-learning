@@ -1,17 +1,28 @@
 import argparse
+import os
 import random
 import time
 
-import gymnasium as gym
 import ale_py
+import gymnasium as gym
 import numpy as np
 import tensorflow as tf
 
-from wrappers import PreprocessFrame, FrameStack
-from agent import DQNAgent
+from src.agent import DQNAgent
+from src.wrappers import FrameStack, PreprocessFrame
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR = os.path.join(ROOT_DIR, 'src')
+CHECKPOINT_DIR = os.path.join(ROOT_DIR, 'checkpoints')
+LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
+
+for directory in (CHECKPOINT_DIR, LOGS_DIR, SRC_DIR):
+    os.makedirs(directory, exist_ok=True)
 
 
 def train_loop(env_id='ALE/MsPacman-v5', num_episodes=1000, eval_every=50, eps_decay=250000, checkpoint_dir=None, resume=False, **agent_kwargs):
+    checkpoint_dir = checkpoint_dir or CHECKPOINT_DIR
+    os.makedirs(checkpoint_dir, exist_ok=True)
     # register ALE envs so 'ALE/...' namespaces are available
     try:
         gym.register_envs(ale_py)
@@ -109,7 +120,8 @@ def train_loop(env_id='ALE/MsPacman-v5', num_episodes=1000, eval_every=50, eps_d
                 print(f'Checkpoint saved: {ckpt_path}')
             else:
                 # fallback to legacy weights-only saving
-                agent.save_weights('best_mspacman')
+                weights_path = os.path.join(CHECKPOINT_DIR, 'best_mspacman')
+                agent.save_weights(weights_path)
 
     env.close()
 
@@ -143,8 +155,12 @@ if __name__ == '__main__':
     parser.add_argument('--buffer-size', type=int, default=50000, help='replay buffer size')
     parser.add_argument('--min-replay-size', type=int, default=5000, help='minimum replay buffer size before training')
     parser.add_argument('--checkpoint-dir', type=str, default=None, help='directory to save full checkpoints (model + optimizer)')
+    parser.add_argument('--logs-dir', type=str, default=None, help='directory for TensorBoard or metrics logs')
     parser.add_argument('--resume-checkpoint', action='store_true', help='if set, attempt to restore from latest checkpoint in --checkpoint-dir before training')
     args = parser.parse_args()
+
+    logs_dir = args.logs_dir or LOGS_DIR
+    os.makedirs(logs_dir, exist_ok=True)
 
     agent_kwargs = {
         'lr': args.lr,

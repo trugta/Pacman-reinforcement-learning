@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+.venv-old/
+checkpoints/
+logs/
+*.weights.h5
+*.index
+*.data-00000-of-00001
