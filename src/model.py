@@ -4,8 +4,8 @@ from tensorflow.keras import layers
 
 
 def build_q_network(input_shape: Tuple[int, int, int], n_actions: int) -> keras.Model:
-    inputs = layers.Input(shape=input_shape, name='input_layer')
-    x = layers.Lambda(lambda x: x)(inputs)
+    inputs = layers.Input(shape=input_shape)
+    x = layers.Reshape((input_shape[0], input_shape[1], input_shape[2]))(inputs)
     x = layers.Conv2D(32, 8, strides=4, activation='relu', kernel_initializer='he_uniform')(x)
     x = layers.Conv2D(64, 4, strides=2, activation='relu', kernel_initializer='he_uniform')(x)
     x = layers.Conv2D(64, 3, strides=1, activation='relu', kernel_initializer='he_uniform')(x)
