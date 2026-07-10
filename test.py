@@ -22,47 +22,60 @@ def make_env(env_id='ALE/MsPacman-v5', render_mode=None):
     return env
 
 
-def load_agent_artifacts(agent, weights_path=None, checkpoint_dir=None):
+def load_agent_artifacts(agent, checkpoint_dir=None):
+    """Load the trained agent from checkpoint.
+    
+    Args:
+        agent: DQNAgent instance to load into
+        checkpoint_dir: Directory containing checkpoint files
+    
+    Returns:
+        Path to loaded checkpoint
+    """
     checkpoint_dir = checkpoint_dir or CHECKPOINT_DIR
     os.makedirs(checkpoint_dir, exist_ok=True)
-    if weights_path:
-        if not os.path.isabs(weights_path):
-            if os.path.exists(weights_path):
-                resolved_path = weights_path
-            elif os.path.exists(os.path.join(checkpoint_dir, weights_path)):
-                resolved_path = os.path.join(checkpoint_dir, weights_path)
-            else:
-                resolved_path = os.path.join(checkpoint_dir, weights_path)
-            weights_path = resolved_path
-        agent.load_weights(weights_path)
-        print(f'Loaded weights: {weights_path}')
-        return weights_path
-    if checkpoint_dir:
-        restored = agent.load_checkpoint(checkpoint_dir)
-        if restored:
-            print(f'Loaded checkpoint: {restored}')
-            return restored
-    raise FileNotFoundError('No checkpoint or weights file could be loaded.')
+    
+    ckpt_path = os.path.join(checkpoint_dir, 'checkpoint.h5')
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError(
+            f'Checkpoint not found at {ckpt_path}.\n'
+            f'Train an agent first with: python train.py --steps 10000'
+        )
+    
+    result = agent.load_checkpoint(checkpoint_dir)
+    if not result:
+        raise RuntimeError(f'Failed to load checkpoint from {checkpoint_dir}')
+    
+    return result
 
 
-def play(weights_path='weights.h5', env_id='ALE/MsPacman-v5', episodes=1, checkpoint_dir=None, render=False):
+def play(env_id='ALE/MsPacman-v5', episodes=1, checkpoint_dir=None, render=False):
+    """Run trained agent for evaluation.
+    
+    Args:
+        env_id: Gymnasium environment ID
+        episodes: Number of episodes to play
+        checkpoint_dir: Directory containing checkpoint
+        render: Whether to render the environment
+    """
     env = make_env(env_id, render_mode='human' if render else None)
     obs_shape = env.observation_space.shape
     n_actions = env.action_space.n
 
     agent = DQNAgent(obs_shape, n_actions)
-    load_agent_artifacts(agent, weights_path=weights_path, checkpoint_dir=checkpoint_dir)
-    agent.test(env, nb_episodes=episodes, visualize=render)
+    load_agent_artifacts(agent, checkpoint_dir=checkpoint_dir)
+    reward = agent.test(env, nb_episodes=episodes)
+    if reward is not None:
+        print(f'Average reward over {episodes} episode(s): {reward:.2f}')
     env.close()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run a trained MsPacman agent with TensorFlow/Keras.')
-    parser.add_argument('--weights', default='weights.h5', help='Path to the saved DQN weights file')
-    parser.add_argument('--checkpoint-dir', default=None, help='Directory containing saved weights checkpoints')
-    parser.add_argument('--episodes', type=int, default=1, help='Number of episodes to play')
+    parser.add_argument('--checkpoint-dir', default=None, help='Directory containing checkpoint (default: checkpoints/)')
+    parser.add_argument('--episodes', type=int, default=1, help='Number of episodes to play (default: 1)')
     parser.add_argument('--env-id', default='ALE/MsPacman-v5', help='Gymnasium environment id')
-    parser.add_argument('--render', action='store_true', help='Render the environment while evaluating')
+    parser.add_argument('--no-render', action='store_true', help='Disable rendering (headless mode)')
     args = parser.parse_args()
 
-    play(weights_path=args.weights, env_id=args.env_id, episodes=args.episodes, checkpoint_dir=args.checkpoint_dir, render=args.render)
+    play(env_id=args.env_id, episodes=args.episodes, checkpoint_dir=args.checkpoint_dir, render=not args.no_render)

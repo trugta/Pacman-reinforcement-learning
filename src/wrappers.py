@@ -28,7 +28,7 @@ class PreprocessFrame(gym.ObservationWrapper):
         else:
             pil = Image.fromarray(img)
             pil = pil.convert('L')
-            pil = pil.resize(self.shape[::-1], Image.BILINEAR)
+            pil = pil.resize(self.shape[::-1], Image.Resampling.BILINEAR)
             resized = np.array(pil)
 
         resized = resized.astype(np.float32) / 255.0

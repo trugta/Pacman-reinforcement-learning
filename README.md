@@ -4,15 +4,15 @@ This repository contains a DQN / Double DQN implementation to train an agent to 
 
 Project layout (key files):
 - `src/wrappers.py` — Gymnasium observation wrappers (`PreprocessFrame`, `FrameStack`).
-- `src/buffer.py` — `ReplayBuffer` implementation.
 - `src/model.py` — CNN Q-network builder (`build_q_network`).
-- `src/agent.py` — `DQNAgent` class (action selection, memory, training step).
+- `src/agent.py` — `DQNAgent` class (action selection, replay buffer, training step).
 - `train.py` — training entrypoint and `train_loop`.
-- `test.py` — load saved weights/checkpoints and render agent playing.
+- `test.py` — load a saved checkpoint and evaluate/render the agent.
 - `checkpoints/` — model weights, optimizer states, and checkpoint metadata.
 - `logs/` — TensorBoard or training metric logs.
 - `requirements.txt` — Python dependencies.
 - `README.md` — this file.
+- `CHANGELOG.md` — history of fixes and known issues.
 
 Quick setup (Windows):
 
@@ -42,13 +42,13 @@ from train import train_loop
 train_loop(num_episodes=500, eval_every=50)
 ```
 
-4. Evaluate / play using a saved model:
+4. Evaluate / play using a saved checkpoint:
 
 ```powershell
-python test.py
-# or from Python (you can pass the base name; the loader will add the correct suffix)
+python test.py --episodes 1
+# or from Python
 from test import play
-play('best_mspacman', episodes=1)
+play(episodes=1, checkpoint_dir='checkpoints')
 ```
 
 Notes and tips:
@@ -79,13 +79,12 @@ Checkpointing (resumeable training)
 # start training and write full checkpoints (model + optimizer) into 'checkpoints/'
 python train.py --checkpoint-dir checkpoints
 
-# resume training from latest checkpoint in 'checkpoints/'
-python train.py --checkpoint-dir checkpoints --resume-checkpoint
+# resume training from a specific checkpoint file
+python train.py --checkpoint-dir checkpoints --resume-checkpoint checkpoints/checkpoint.h5
 ```
 
 Run the tester to play a saved model:
 
 ```powershell
-python test.py
+python test.py --episodes 10 --render
 ```
-
