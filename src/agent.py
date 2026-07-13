@@ -9,6 +9,23 @@ from tensorflow import keras
 from src.model import build_q_network
 
 
+def _json_safe(obj):
+    """Recursively convert numpy scalar/array types to native Python types
+    so json.dump() doesn't choke on things like np.float32 that can appear
+    inside keras.optimizers.serialize()'s output (observed with TF 2.10's
+    legacy optimizer implementation).
+    """
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, np.generic):  # covers np.float32, np.int64, etc.
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
 class DQNAgent:
     def __init__(self, obs_shape, n_actions, lr=1e-4, batch_size=32, buffer_size=50000, min_replay_size=1000, target_update_freq=1000, eps_decay=250000):
         self.obs_shape = obs_shape
@@ -81,7 +98,7 @@ class DQNAgent:
         """Compute epsilon for epsilon-greedy exploration using decay schedule."""
         return max(0.01, 1.0 - step / self.eps_decay)
 
-    def fit(self, env, nb_steps=None, nb_episodes=None, checkpoint_dir=None, log_dir=None, start_step=0, eval_env=None, eval_every=None):
+    def fit(self, env, nb_steps=None, nb_episodes=None, checkpoint_dir=None, log_dir=None, start_step=0, eval_env=None, eval_every=None, log_every=None, checkpoint_every=None):
         """Train agent for either nb_steps environment interactions or nb_episodes full episodes.
         
         Args:
@@ -93,6 +110,8 @@ class DQNAgent:
             start_step: Step to resume from (for checkpointing)
             eval_env: Separate environment for evaluation (if None, uses training env)
             eval_every: Evaluate every N episodes (only with nb_episodes; if None, no eval)
+            log_every: Print progress every N env steps (only with nb_steps; if None, no periodic logging)
+            checkpoint_every: Save a checkpoint every N env steps (only with nb_steps; if None, only saves at the end)
         """
         os.makedirs(checkpoint_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), 'checkpoints'), exist_ok=True)
         os.makedirs(log_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs'), exist_ok=True)
@@ -137,23 +156,52 @@ class DQNAgent:
                     print(f'  [Eval at episode {episode_count}] reward: {eval_reward:.2f}')
         else:
             # Step-based training
+            checkpoint_path = os.path.join(
+                checkpoint_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), 'checkpoints'),
+                'checkpoint.h5',
+            )
+            episode_reward = 0.0
+            recent_episode_rewards = collections.deque(maxlen=20)
+            recent_losses = collections.deque(maxlen=100)
+            episode_count = 0
+
             for step in range(start_step, start_step + (nb_steps or 10000)):
                 eps = self._get_epsilon(self.env_steps)
                 action = self.act(obs, eps=eps)
                 next_obs, reward, terminated, truncated, info = env.step(action)
+                episode_reward += reward
                 next_lives = info.get('lives', None)
                 life_lost = (next_lives is not None and current_lives is not None
                              and next_lives < current_lives)
                 clipped_reward = float(np.clip(reward, -1.0, 1.0))
                 self.store(obs, action, clipped_reward, next_obs, terminated or life_lost)
                 if self.can_train():
-                    self.train_step()
+                    loss = self.train_step()
+                    if loss is not None:
+                        recent_losses.append(loss)
                 self.env_steps += 1
                 current_lives = next_lives
                 obs = next_obs
+
                 if terminated or truncated:
+                    episode_count += 1
+                    recent_episode_rewards.append(episode_reward)
+                    episode_reward = 0.0
                     obs, info = env.reset()
                     current_lives = info.get('lives', None)
+
+                if log_every is not None and self.env_steps % log_every == 0:
+                    avg_reward = float(np.mean(recent_episode_rewards)) if recent_episode_rewards else float('nan')
+                    avg_loss = float(np.mean(recent_losses)) if recent_losses else float('nan')
+                    print(
+                        f'Step {self.env_steps}/{start_step + (nb_steps or 10000)} '
+                        f'(episodes={episode_count}, eps={eps:.3f}, '
+                        f'avg_reward(last {len(recent_episode_rewards)} ep)={avg_reward:.2f}, '
+                        f'avg_loss(last {len(recent_losses)})={avg_loss:.4f})'
+                    )
+
+                if checkpoint_every is not None and self.env_steps % checkpoint_every == 0:
+                    self.save_checkpoint(checkpoint_path)
 
         if self.env_steps < self.eps_decay:
             print(
@@ -202,6 +250,7 @@ class DQNAgent:
             'env_steps': int(self.env_steps),
             'optimizer_config': keras.optimizers.serialize(self.optimizer),
         }
+        metadata = _json_safe(metadata)
         metadata_path = path.replace('.h5', '_metadata.json')
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f)

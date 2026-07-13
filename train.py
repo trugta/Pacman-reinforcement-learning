@@ -26,8 +26,9 @@ def make_env(env_id='ALE/MsPacman-v5', render_mode=None):
     return env
 
 
-def train_loop(env_id='ALE/MsPacman-v5', num_steps=10000, num_episodes=None, eval_every=None, 
-               checkpoint_dir=None, log_dir=None, resume_checkpoint=None, eps_decay=250000, **agent_kwargs):
+def train_loop(env_id='ALE/MsPacman-v5', num_steps=10000, num_episodes=None, eval_every=None,
+               checkpoint_dir=None, log_dir=None, resume_checkpoint=None, eps_decay=250000,
+               log_every=10000, checkpoint_every=50000, **agent_kwargs):
     """Train DQN agent on Atari environment.
     
     Args:
@@ -39,6 +40,8 @@ def train_loop(env_id='ALE/MsPacman-v5', num_steps=10000, num_episodes=None, eva
         log_dir: Directory for logs
         resume_checkpoint: Path to checkpoint to resume training from
         eps_decay: Number of steps for epsilon decay schedule
+        log_every: Print progress every N env steps (only used with num_steps; None disables)
+        checkpoint_every: Save a checkpoint every N env steps (only used with num_steps; None disables)
         **agent_kwargs: Additional keyword arguments for DQNAgent
     """
     checkpoint_dir = checkpoint_dir or CHECKPOINT_DIR
@@ -79,8 +82,18 @@ def train_loop(env_id='ALE/MsPacman-v5', num_steps=10000, num_episodes=None, eva
                   start_step=start_step, eval_every=eval_every)
     else:
         # Step-based training
-        print(f'Starting TensorFlow/Keras DQN training for {num_steps} steps (eps_decay={eps_decay} steps)...')
-        agent.fit(env, nb_steps=num_steps, checkpoint_dir=checkpoint_dir, log_dir=log_dir, start_step=start_step)
+        if eval_every is not None:
+            print(
+                f'Warning: --eval-every {eval_every} was set, but periodic evaluation only runs '
+                f'in episode-based mode (--episodes). It has no effect with --steps and will be ignored. '
+                f'Use --log-every / --checkpoint-every for progress visibility in step-based mode instead.'
+            )
+        print(
+            f'Starting TensorFlow/Keras DQN training for {num_steps} steps (eps_decay={eps_decay} steps, '
+            f'log_every={log_every}, checkpoint_every={checkpoint_every})...'
+        )
+        agent.fit(env, nb_steps=num_steps, checkpoint_dir=checkpoint_dir, log_dir=log_dir, start_step=start_step,
+                  log_every=log_every, checkpoint_every=checkpoint_every)
     
     env.close()
 
@@ -93,6 +106,8 @@ if __name__ == '__main__':
     parser.add_argument('--episodes', type=int, default=None, help='number of training episodes (overrides --steps if set)')
     parser.add_argument('--eval-every', type=int, default=None, help='evaluate every N episodes (requires --episodes)')
     parser.add_argument('--eps-decay', type=int, default=250000, help='number of steps for epsilon decay (default: 250000)')
+    parser.add_argument('--log-every', type=int, default=10000, help='print progress every N env steps in step-based mode (default: 10000; use 0 or negative to disable)')
+    parser.add_argument('--checkpoint-every', type=int, default=50000, help='save a checkpoint every N env steps in step-based mode (default: 50000; use 0 or negative to disable)')
     
     # Hyperparameters
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate for optimizer (default: 1e-4)')
@@ -115,6 +130,8 @@ if __name__ == '__main__':
         log_dir=args.logs_dir,
         resume_checkpoint=args.resume_checkpoint,
         eps_decay=args.eps_decay,
+        log_every=args.log_every if args.log_every and args.log_every > 0 else None,
+        checkpoint_every=args.checkpoint_every if args.checkpoint_every and args.checkpoint_every > 0 else None,
         lr=args.lr,
         batch_size=args.batch_size,
         buffer_size=args.buffer_size,
