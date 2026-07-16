@@ -73,6 +73,10 @@ Train with custom settings:
 python train.py --episodes 500 --eval-every 50 --lr 0.00025 --batch-size 64 --eps-decay 500000
 ```
 
+python train.py --steps 1000000 --lr 0.0001 --eps-decay 200000 --log-every 5000 --checkpoint-every 10000
+# resume training from a specific checkpoint file
+python train.py --steps <remaining_steps> --resume-checkpoint checkpoints/checkpoint.h5 --lr 0.0001 --eps-decay 200000 --log-every 5000 --checkpoint-every 10000
+
 Checkpointing (resumeable training)
 
 ```powershell
